@@ -265,22 +265,43 @@ class Constellation:
         return routes
 
     def _bfs(self, src, dst, banned, rng, min_sats):
-        queue = deque([[src]])
+        """Shortest simple route with at least `min_sats` satellites.
+
+        Searches states (node, satellites so far capped at min_sats) with a
+        visited set, so work is bounded by nodes x min_sats even when dst is
+        unreachable.
+        """
+        start = (src, 0)
+        parent = {start: None}
+        queue = deque([start])
         while queue:
-            path = queue.popleft()
-            neighbours = list(self.links[path[-1]])
+            state = queue.popleft()
+            node, depth = state
+            path = self._path_to(state, parent)
+            neighbours = list(self.links[node])
             rng.shuffle(neighbours)
             for nxt in neighbours:
                 if nxt in path or nxt in banned or nxt in self.failed:
                     continue
                 if nxt == dst:
-                    if len(path) - 1 >= min_sats:
+                    if depth >= min_sats:
                         return path[1:] + [dst]
                     continue
                 if isinstance(self.nodes[nxt], GroundStation):
                     continue
-                queue.append(path + [nxt])
+                child = (nxt, min(depth + 1, min_sats))
+                if child not in parent:
+                    parent[child] = state
+                    queue.append(child)
         return None
+
+    @staticmethod
+    def _path_to(state, parent) -> list[str]:
+        path = []
+        while state is not None:
+            path.append(state[0])
+            state = parent[state]
+        return path[::-1]
 
     def send(self, sender: GroundStation, receiver_id: str, message: bytes,
              paths: int = 2, min_sats: int = 3) -> list[dict]:

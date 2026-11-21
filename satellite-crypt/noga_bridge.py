@@ -7,9 +7,12 @@ layer, then by one layer per satellite. The receiving ground station peels the
 satellite layers and asks Noga to decrypt the token.
 
 The client mirrors the `mcp()` helper in the /home/crypt page: a JSON-RPC
-`tools/call` POST to /mcp-engine/ with the page's query string and session
-cookie. The server requires a logged-in session; pass your own cookie/query,
-never commit them.
+`tools/call` POST to /mcp-engine/. Run it on the server, against the local
+engine (e.g. base_url="http://127.0.0.1:4126"), not from a client: if the
+query string or cookie carries the master key (`?k=...`), it ends up in URLs,
+proxy logs and shell history. The Noga layer's AES key is derived from that
+master key, so the end-to-end layer, which has its own keys, is the layer that
+actually protects confidentiality until the master key is rotated.
 """
 
 from __future__ import annotations

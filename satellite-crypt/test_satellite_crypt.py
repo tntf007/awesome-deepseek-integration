@@ -1,3 +1,4 @@
+import time
 import unittest
 
 import satellite_crypt as sc
@@ -65,6 +66,34 @@ class SatelliteCryptTest(unittest.TestCase):
         for r in results:
             self.assertNotIn("P1-S0", r["route"])
         self.assertEqual(results[0]["delivered"][2], b"ok")
+
+    def test_unreachable_destination_fails_fast(self):
+        sky = sc.Constellation(planes=24, per_plane=24)
+        sky.add_ground_station("GS-A", ["P0-S0"])
+        sky.add_ground_station("GS-Z", [])
+        start = time.monotonic()
+        with self.assertRaises(sc.RoutingError):
+            sky.find_routes("GS-A", "GS-Z", count=2, min_sats=5)
+        self.assertLess(time.monotonic() - start, 2.0)
+
+    def test_min_sats_respected_when_shortest_is_shorter(self):
+        self.sky.add_ground_station("GS-C", ["P0-S1"])
+        route = self.sky.find_routes("GS-A", "GS-C", min_sats=4)[0]
+        self.assertGreaterEqual(len(route) - 1, 4)
+        self.assertEqual(len(route), len(set(route)))
+        prev = "GS-A"
+        for hop in route:
+            self.assertIn(hop, self.sky.links[prev])
+            prev = hop
+
+    def test_large_constellation_routes_quickly(self):
+        sky = sc.Constellation(planes=40, per_plane=40)
+        a = sky.add_ground_station("GS-A", ["P0-S0"])
+        sky.add_ground_station("GS-B", ["P20-S20"])
+        start = time.monotonic()
+        results = sky.send(a, "GS-B", b"far", paths=2)
+        self.assertLess(time.monotonic() - start, 5.0)
+        self.assertEqual(results[0]["delivered"][2], b"far")
 
     def test_padding_hides_exact_length(self):
         self.assertEqual(len(sc.pad(b"a")), len(sc.pad(b"a" * 200)))
