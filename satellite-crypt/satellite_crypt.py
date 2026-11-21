@@ -255,7 +255,7 @@ class Constellation:
         used: set[str] = set()
         routes: list[list[str]] = []
         for _ in range(count):
-            route = self._bfs(src, dst, used, rng, min_sats)
+            route = self._route(src, dst, used, rng, min_sats)
             if route is None:
                 break
             routes.append(route)
@@ -264,44 +264,72 @@ class Constellation:
             raise RoutingError(f"no route from {src} to {dst}")
         return routes
 
-    def _bfs(self, src, dst, banned, rng, min_sats):
+    def _route(self, src, dst, banned, rng, min_sats, slack=6, budget=200_000):
         """Shortest simple route with at least `min_sats` satellites.
 
-        Searches states (node, satellites so far capped at min_sats) with a
-        visited set, so work is bounded by nodes x min_sats even when dst is
-        unreachable.
+        A BFS from dst gives each satellite its hop distance to dst; an
+        unreachable dst ends here. Then a randomized depth-first search looks
+        for a route of exactly L satellites, for L from the shortest feasible
+        length upward, pruning any satellite too far from dst to finish in
+        time. `budget` caps the work per length.
         """
-        start = (src, 0)
-        parent = {start: None}
-        queue = deque([start])
-        while queue:
-            state = queue.popleft()
-            node, depth = state
-            path = self._path_to(state, parent)
-            neighbours = list(self.links[node])
-            rng.shuffle(neighbours)
-            for nxt in neighbours:
-                if nxt in path or nxt in banned or nxt in self.failed:
-                    continue
-                if nxt == dst:
-                    if depth >= min_sats:
-                        return path[1:] + [dst]
-                    continue
-                if isinstance(self.nodes[nxt], GroundStation):
-                    continue
-                child = (nxt, min(depth + 1, min_sats))
-                if child not in parent:
-                    parent[child] = state
-                    queue.append(child)
+        if dst in self.failed:
+            return None
+        blocked = banned | self.failed
+        dist = self._hops_to(dst, blocked)
+        starts = [n for n in self.links[src] if n in dist and n != dst]
+        if not starts:
+            return None
+        lo = max(min_sats, min(dist[n] for n in starts))
+        for length in range(lo, lo + slack + 1):
+            work = [budget]
+            rng.shuffle(starts)
+            for first in starts:
+                if dist[first] <= length:
+                    found = self._extend([first], {first}, length, dst, dist, rng, work)
+                    if found:
+                        return found
+                if work[0] <= 0:
+                    break
         return None
 
-    @staticmethod
-    def _path_to(state, parent) -> list[str]:
-        path = []
-        while state is not None:
-            path.append(state[0])
-            state = parent[state]
-        return path[::-1]
+    def _extend(self, path, on_path, length, dst, dist, rng, work):
+        work[0] -= 1
+        if work[0] <= 0:
+            return None
+        node, left = path[-1], length - len(path)
+        if left == 0:
+            return path + [dst] if dst in self.links[node] else None
+        neighbours = list(self.links[node])
+        rng.shuffle(neighbours)
+        for nxt in neighbours:
+            if nxt in on_path or nxt == dst or dist.get(nxt, left + 1) > left:
+                continue
+            path.append(nxt)
+            on_path.add(nxt)
+            found = self._extend(path, on_path, length, dst, dist, rng, work)
+            if found:
+                return found
+            path.pop()
+            on_path.discard(nxt)
+        return None
+
+    def _hops_to(self, dst, blocked) -> dict[str, int]:
+        """Satellites that can reach dst -> satellites on the way, inclusive."""
+        dist: dict[str, int] = {}
+        queue = deque()
+        for n in self.links[dst]:
+            if n not in blocked and not isinstance(self.nodes[n], GroundStation):
+                dist[n] = 1
+                queue.append(n)
+        while queue:
+            node = queue.popleft()
+            for nxt in self.links[node]:
+                if nxt in dist or nxt in blocked or isinstance(self.nodes[nxt], GroundStation):
+                    continue
+                dist[nxt] = dist[node] + 1
+                queue.append(nxt)
+        return dist
 
     def send(self, sender: GroundStation, receiver_id: str, message: bytes,
              paths: int = 2, min_sats: int = 3) -> list[dict]:
