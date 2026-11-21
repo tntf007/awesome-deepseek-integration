@@ -11,6 +11,28 @@
 5. **העברה** — כל לוויין מקלף רק את השכבה שלו ולומד רק מי הקפיצה הבאה. הוא לא רואה את התוכן, את השולח או את היעד הסופי.
 6. **קבלה** — תחנת היעד פותחת את השכבה האחרונה, מאמתת את חתימת השולח ומשליכה עותק כפול שהגיע במסלול השני.
 
+## חיבור להצפנת-נגה (חי-אמת)
+
+`noga_bridge.py` מחבר את ההצפנה הקיימת בשרת (`noga_encrypt` / `noga_decrypt` דרך `/mcp-engine/`) לשכבות הלוויינים:
+
+1. השולח מצפין את הטקסט בנגה ומקבל token.
+2. ה-token נשלח כתוכן ההודעה דרך מערך הלוויינים, עטוף בשכבה מקצה לקצה ובשכבה לכל לוויין.
+3. תחנת היעד מקלפת את שכבות הלוויינים ומבקשת מנגה לפענח את ה-token.
+
+```python
+from satellite_crypt import Constellation
+from noga_bridge import NogaClient, send_text, open_delivered
+
+noga = NogaClient(query="?...", cookie="...")  # פרטי ההתחברות שלך, לא לשמור בקוד
+sky = Constellation(planes=6, per_plane=11)
+a = sky.add_ground_station("GS-A", ["P0-S0", "P1-S0"])
+sky.add_ground_station("GS-B", ["P3-S5", "P4-S5"])
+results, sealed = send_text(sky, a, "GS-B", "שלום", noga, rakia=3)
+print(open_delivered(results, noga)["text"])
+```
+
+השרת דורש התחברות, ולכן הבדיקות משתמשות בתחליף מקומי (`FakeNoga`) ולא בשרת האמיתי.
+
 ## מה ההגנה נותנת
 
 | איום | הגנה |
