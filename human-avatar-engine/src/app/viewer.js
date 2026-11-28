@@ -5,6 +5,9 @@ import * as THREE from 'three';
 import { createSkeleton, createSkeletonView } from '../core/skeleton.js';
 import { createAnatomicalView } from '../core/anatomy.js';
 import { createBodyLayer } from '../core/body-layer.js';
+import { loadRealSkeleton } from '../core/real-skeleton.js';
+import { applyAnthropometry } from '../core/anthropometry.js';
+import { ansurMeasurements } from '../data/ansur-proportions.js';
 import { bindModelToSkeleton } from '../core/model-attach.js';
 import { applyProportions, defaultBodyParams } from '../formulas/proportions.js';
 import { breathingCurve, chainPhases, spiralPoint, MILKY_WAY } from '../formulas/milkyway.js';
@@ -102,6 +105,10 @@ export function createViewer(canvas, { background = 0x0a0f1a } = {}) {
   const body = createBodyLayer(skeleton);
   scene.add(skeleton.root);
 
+  // עותק של היסטי ברירת המחדל — לשחזור אחרי כיול ANSUR
+  const defaultRest = new Map([...skeleton.restOffsets].map(([k, v]) => [k, v.clone()]));
+  let realSkel = null; // השלד האמיתי (BodyParts3D) — נטען עצלנית
+
   let skeletonStyle = 'anatomic';
   const applySkeletonStyle = () => {
     const schematic = skeletonStyle === 'schematic';
@@ -109,6 +116,7 @@ export function createViewer(canvas, { background = 0x0a0f1a } = {}) {
       if (o.isMesh && (o.name.startsWith('joint:') || o.name.startsWith('bone:'))) o.visible = schematic;
     });
     anatomy.setVisible(skeletonStyle === 'anatomic');
+    realSkel?.setVisible(skeletonStyle === 'real');
   };
   applySkeletonStyle();
 
@@ -171,11 +179,43 @@ export function createViewer(canvas, { background = 0x0a0f1a } = {}) {
     scene, camera, renderer, skeleton, body,
     getParams: () => ({ ...params }),
 
-    /** פרומפט טקסט → עדכון גוף */
+    /** פרומפט טקסט → עדכון גוף (כולל זיהוי גבר/אישה → כיול ANSUR) */
     applyPromptText(text) {
+      if (/אישה|נקבה|woman|female/i.test(text)) this.setAnthropometry('female');
+      else if (/גבר|איש בוגר|\bman\b|male/i.test(text)) this.setAnthropometry('male');
       params = parsePrompt(text, params);
       this.setParams(params);
       return params;
+    },
+
+    /**
+     * כיול מנתוני אמת: 'male' / 'female' (ממוצעי ANSUR II, 6,068 נמדדים)
+     * או null לחזרה לפרופורציות ברירת המחדל.
+     */
+    setAnthropometry(sex, quantile = 'mean') {
+      if (sex) {
+        const stature = applyAnthropometry(skeleton, ansurMeasurements(sex, quantile));
+        params.height = stature;
+      } else {
+        for (const [k, v] of defaultRest) skeleton.restOffsets.get(k).copy(v);
+        params.height = 1.75;
+      }
+      return this.setParams(params);
+    },
+
+    /**
+     * טוען ומציג את השלד האמיתי (BodyParts3D MRI). חייב GLTFLoader ו-url
+     * של assets/real-skeleton.glb. בטוח לקריאה חוזרת.
+     */
+    async enableRealSkeleton({ GLTFLoader, url, buffer = null }) {
+      if (!realSkel) {
+        realSkel = await loadRealSkeleton(url, { GLTFLoader, buffer });
+        realSkel.attach(skeleton);
+      }
+      realSkel.refit(skeleton, params);
+      skeletonStyle = 'real';
+      applySkeletonStyle();
+      return realSkel.parts.length;
     },
 
     setParams(p) {
@@ -183,12 +223,13 @@ export function createViewer(canvas, { background = 0x0a0f1a } = {}) {
       body.rebuild();
       body.applyParams(params);
       anatomy.rebuild();
+      realSkel?.refit(skeleton, params);
       applySkeletonStyle();
       ctrl.apply();
       return params;
     },
 
-    /** 'anatomic' | 'schematic' | 'none' */
+    /** 'real' | 'anatomic' | 'schematic' | 'none' */
     setSkeletonStyle(style) { skeletonStyle = style; applySkeletonStyle(); },
     getSkeletonStyle: () => skeletonStyle,
 

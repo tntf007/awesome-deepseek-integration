@@ -35,7 +35,7 @@
     <input id="opacity" type="range" min="0" max="0.8" step="0.01" value="0.22"></label>
   <label>עוצמת מעקב מצלמה
     <input id="blend" type="range" min="0" max="1" step="0.01" value="0.85"></label>
-  <button id="skelstyle">שלד: אנטומי ⇄ סכמטי</button>
+  <button id="skelstyle">שלד: אנטומי → אמיתי (MRI) → סכמטי</button>
   <input id="glb" type="file" accept=".glb,.gltf" hidden>
   <button id="attach">הלבשת מודל GLB…</button>
   <button id="camera">הפעלת מצלמה (זמן אמת)</button>
@@ -62,10 +62,19 @@ document.getElementById('apply').onclick = () => {
   status(`גובה ${p.height.toFixed(2)}m · שריר ${p.muscle.toFixed(2)} · משקל ${p.weight.toFixed(2)}`);
 };
 document.getElementById('opacity').oninput = (e) => viewer.setBodyOpacity(+e.target.value);
-document.getElementById('skelstyle').onclick = () => {
-  const next = viewer.getSkeletonStyle() === 'anatomic' ? 'schematic' : 'anatomic';
+const STYLE_CYCLE = { anatomic: 'real', real: 'schematic', schematic: 'anatomic' };
+document.getElementById('skelstyle').onclick = async () => {
+  const next = STYLE_CYCLE[viewer.getSkeletonStyle()] ?? 'anatomic';
+  if (next === 'real') {
+    status('טוען שלד אמיתי (BodyParts3D, סריקת MRI)…');
+    try {
+      const n = await viewer.enableRealSkeleton({ GLTFLoader, url: '../assets/real-skeleton.glb' });
+      status(`שלד אמיתי: ${n} קבוצות עצמות מסריקת MRI (BodyParts3D)`);
+    } catch (e) { status('טעינת השלד האמיתי נכשלה: ' + e.message); viewer.setSkeletonStyle('anatomic'); }
+    return;
+  }
   viewer.setSkeletonStyle(next);
-  status(next === 'anatomic' ? 'שלד אנטומי: גולגולת, חוליות, צלעות, אגן' : 'שלד סכמטי: מפרקים וגלילים');
+  status(next === 'anatomic' ? 'שלד אנטומי פרוצדורלי' : 'שלד סכמטי: מפרקים וגלילים');
 };
 document.getElementById('blend').oninput = (e) => viewer.setTrackingBlend(tracker?.running ? +e.target.value : 0);
 

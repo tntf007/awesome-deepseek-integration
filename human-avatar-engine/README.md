@@ -26,7 +26,13 @@
 | קובץ | תפקיד |
 |---|---|
 | `src/core/skeleton.js` | היררכיית העצמות, בניית השלד, ויזואליזציה סכמטית |
-| `src/core/anatomy.js` | שלד אנטומי אמיתי: גולגולת, חוליות, צלעות, אגן, עצמות ארוכות |
+| `src/core/anatomy.js` | שלד אנטומי פרוצדורלי: גולגולת, חוליות, צלעות, אגן, עצמות ארוכות |
+| `src/core/real-skeleton.js` | טעינת השלד האמיתי (BodyParts3D) והלבשתו על הריג |
+| `src/core/anthropometry.js` | כיול השלד ממדידות גוף אמיתיות (ANSUR II) |
+| `src/data/ansur-proportions.js` | מערך פרופורציות שנגזר מ-6,068 בני אדם אמיתיים (נוצר אוטומטית) |
+| `assets/real-skeleton.glb` | 198 עצמות אמיתיות מסריקת MRI, ממוזגות ל-19 קבוצות ריג (6.3MB) |
+| `tools/build-ansur-proportions.mjs` | מחולל מערך הפרופורציות מקובצי ה-CSV של ANSUR II |
+| `tools/build-real-skeleton.mjs` | בונה את ה-GLB מקובצי ה-STL של BodyParts3D |
 | `src/core/body-layer.js` | שכבת הגוף השקופה (קפסולות מעל כל מקטע) |
 | `src/core/model-attach.js` | הלבשת מודל חיצוני וקישור עצמות (Mixamo/VRM) |
 | `src/formulas/milkyway.js` | נוסחת שביל החלב: ספירלה לוגריתמית `r = r0·e^(θ·tanφ)` — נשימה, גלי תנועה, דעיכת מורפים |
@@ -76,6 +82,11 @@ r(θ) = r₀ · e^(θ·tan φ)
 - [ ] **שלב 4** — IK מלא (FABRIK) לרגליים וידיים, מגע קרקע
 - [ ] **שלב 5** — החלפת פנים בזמן אמת על המודל המולבש
 
+## מקורות נתוני אמת
+
+- **ANSUR II** — the 2012 U.S. Army Anthropometric Survey (Gordon et al., Natick/TR-15/007). נתונים ציבוריים: 4,082 גברים + 1,986 נשים, 93 מדידות במ"מ. מהם נגזר `src/data/ansur-proportions.js`, והשלד מכויל כך שגובה הכתף, הברך, הירך והקומה משחזרים את הממוצעים האמיתיים מילימטרית (`src/core/anthropometry.js`). בפרומפט: "גבר" / "אישה".
+- **BodyParts3D / Anatomography** — © The Database Center for Life Science, רישיון [CC-BY-SA 2.1 Japan](https://creativecommons.org/licenses/by-sa/2.1/jp/). רשתות עצמות שסומנו מסריקת MRI של גוף אדם אמיתי. 198 עצמות (גולגולת על 18 חלקיה, 24 חוליות, 24 צלעות, אגן, כל עצמות הגפיים עד אצבעות) דוללו ומוזגו ל-19 קבוצות התואמות את עצמות הריג, עם צירי מפרקים שחושבו מהעצמות עצמן (ראש הירך, הקונדילים). `assets/real-skeleton.glb` הוא יצירה נגזרת ולכן כפוף לאותו רישיון.
+
 ## רישיון
 
-MIT — כמו שאר הריפו.
+MIT לקוד המנוע. `assets/real-skeleton.glb` — CC-BY-SA 2.1 JP (ראו מקורות).

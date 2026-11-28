@@ -64,16 +64,15 @@ export function applyProportions(skeleton, rawParams) {
     if (name === 'head') bone.scale.setScalar(p.headScale);
   }
 
-  // גובה אגן = סכום שרשרת הרגל כלפי מטה, כדי שכפות הרגליים יישבו על y≈0
-  const legDrop = legChainDrop(skeleton);
-  skeleton.bones.get('hips').position.y = legDrop;
+  // גובה אגן = שרשרת הרגל + מרווח הקרסול מהקרקע, שנגזר מנתוני המנוחה
+  // של השלד עצמו (כך מדידות אמיתיות כמו ANSUR משוחזרות במדויק).
+  const restDrop = ['upperLegL', 'lowerLegL', 'footL']
+    .reduce((acc, n) => acc - skeleton.restOffsets.get(n).y, 0);
+  const clearance = Math.max(0.02, skeleton.restOffsets.get('hips').y - restDrop);
+  const legDrop = ['upperLegL', 'lowerLegL', 'footL']
+    .reduce((acc, n) => acc - skeleton.bones.get(n).position.y, 0);
+  skeleton.bones.get('hips').position.y = legDrop + clearance * s;
   return p;
-}
-
-function legChainDrop(skeleton) {
-  let y = 0;
-  for (const n of ['upperLegL', 'lowerLegL', 'footL']) y -= skeleton.bones.get(n).position.y;
-  return y + 0.04; // גובה כף הרגל מהקרקע
 }
 
 /**
