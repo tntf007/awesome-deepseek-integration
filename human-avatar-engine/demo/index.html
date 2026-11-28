@@ -35,7 +35,7 @@
     <input id="opacity" type="range" min="0" max="0.8" step="0.01" value="0.22"></label>
   <label>עוצמת מעקב מצלמה
     <input id="blend" type="range" min="0" max="1" step="0.01" value="0.85"></label>
-  <button id="skelstyle">שלד: אנטומי → אמיתי (MRI) → סכמטי</button>
+  <button id="skelstyle">שלד: אמיתי (MRI) → אנטומי → סכמטי</button>
   <button id="bodymode">גוף: קפסולות ⇄ עור רציף</button>
   <input id="glb" type="file" accept=".glb,.gltf" hidden>
   <button id="attach">הלבשת מודל GLB…</button>
@@ -71,15 +71,19 @@ document.getElementById('bodymode').onclick = () => {
     status(next === 'skin' ? 'עור רציף: SkinnedMesh עם משקולות עור, מתעוות עם השלד' : 'שכבת קפסולות שקופה');
   });
 };
-const STYLE_CYCLE = { anatomic: 'real', real: 'schematic', schematic: 'anatomic' };
+async function showRealSkeleton() {
+  status('טוען שלד אמיתי (BodyParts3D, סריקת MRI)…');
+  const n = await viewer.enableRealSkeleton({ GLTFLoader, url: '../assets/real-skeleton.glb' });
+  status(`שלד אמיתי: ${n} קבוצות עצמות מסריקת MRI (BodyParts3D)`);
+}
+// השלד האמיתי הוא ברירת המחדל — נטען מיד עם פתיחת הדף
+showRealSkeleton().catch((e) => status('טעינת השלד האמיתי נכשלה: ' + e.message));
+
+const STYLE_CYCLE = { real: 'anatomic', anatomic: 'schematic', schematic: 'real' };
 document.getElementById('skelstyle').onclick = async () => {
-  const next = STYLE_CYCLE[viewer.getSkeletonStyle()] ?? 'anatomic';
+  const next = STYLE_CYCLE[viewer.getSkeletonStyle()] ?? 'real';
   if (next === 'real') {
-    status('טוען שלד אמיתי (BodyParts3D, סריקת MRI)…');
-    try {
-      const n = await viewer.enableRealSkeleton({ GLTFLoader, url: '../assets/real-skeleton.glb' });
-      status(`שלד אמיתי: ${n} קבוצות עצמות מסריקת MRI (BodyParts3D)`);
-    } catch (e) { status('טעינת השלד האמיתי נכשלה: ' + e.message); viewer.setSkeletonStyle('anatomic'); }
+    try { await showRealSkeleton(); } catch (e) { status('טעינת השלד האמיתי נכשלה: ' + e.message); }
     return;
   }
   viewer.setSkeletonStyle(next);

@@ -89,8 +89,8 @@ export function createAnatomicalView(skeleton) {
 
     // ארובות עיניים
     for (const side of [1, -1]) {
-      const socket = new THREE.Mesh(new THREE.SphereGeometry(0.0195 * s, 10, 8), dark);
-      socket.position.set(side * 0.030 * s, 0.118 * s, 0.070 * s);
+      const socket = new THREE.Mesh(new THREE.SphereGeometry(0.0145 * s, 10, 8), dark);
+      socket.position.set(side * 0.030 * s, 0.118 * s, 0.060 * s);
       skull.add(socket);
     }
     // עצמות לחיים
@@ -175,11 +175,11 @@ export function createAnatomicalView(skeleton) {
       for (const side of [1, -1]) {
         const pts = [];
         for (let k = 0; k <= 10; k++) {
-          const th = (k / 10) * Math.PI * 0.94;
+          const th = (k / 10) * Math.PI * 0.78; // מהגב סביב הצד אל קדמת החזה — לא טבעת סגורה
           pts.push(new THREE.Vector3(
             side * Math.sin(th) * wx,
             y - (th / Math.PI) * droop,
-            -Math.cos(th) * wz - 0.012,
+            -Math.cos(th) * wz - 0.02,
           ));
         }
         add('chest', tube(pts, 0.0058, mat, 24));
