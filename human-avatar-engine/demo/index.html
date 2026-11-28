@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human Avatar Engine — דמו מקומי</title>
+<style>
+  :root { --bg:#0a0f1a; --panel:#111a2cdd; --fg:#e8eef7; --accent:#5f9cff; --line:#24467a; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 system-ui, sans-serif; }
+  #scene { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #panel { position: fixed; top: 12px; right: 12px; width: min(320px, calc(100vw - 24px));
+           background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+           padding: 14px; backdrop-filter: blur(8px); display: grid; gap: 10px; }
+  h1 { font-size: 15px; margin: 0; }
+  input[type=text] { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+           background: #0c1322; color: var(--fg); }
+  button { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line);
+           background: #16233c; color: var(--fg); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  label { display: grid; gap: 2px; font-size: 12px; opacity: .9; }
+  #status { font-size: 12px; color: var(--accent); min-height: 1em; }
+  #cam { position: fixed; bottom: 12px; right: 12px; width: 160px; border-radius: 10px;
+         border: 1px solid var(--line); display: none; transform: scaleX(-1); }
+</style>
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="panel">
+  <h1>Human Avatar Engine · v0.1</h1>
+  <input id="prompt" type="text" placeholder='פרומפט: "גבוה 185 ס&quot;מ, שרירי, כתפיים רחבות"'>
+  <button id="apply">החלת פרומפט</button>
+  <label>שקיפות שכבת הגוף
+    <input id="opacity" type="range" min="0" max="0.8" step="0.01" value="0.22"></label>
+  <label>עוצמת מעקב מצלמה
+    <input id="blend" type="range" min="0" max="1" step="0.01" value="0.85"></label>
+  <button id="skelstyle">שלד: אמיתי (MRI) → אנטומי → סכמטי</button>
+  <button id="bodymode">גוף: קפסולות ⇄ עור רציף</button>
+  <input id="glb" type="file" accept=".glb,.gltf" hidden>
+  <button id="attach">הלבשת מודל GLB…</button>
+  <button id="camera">הפעלת מצלמה (זמן אמת)</button>
+  <div id="status"></div>
+</div>
+<video id="cam" muted playsinline></video>
+
+<script type="importmap">
+{ "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import { createViewer } from '../src/app/viewer.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { CameraTracker } from '../src/tracking/camera-tracker.js';
+
+const viewer = createViewer(document.getElementById('scene'));
+const status = (m) => { document.getElementById('status').textContent = m; };
+
+document.getElementById('apply').onclick = () => {
+  const p = viewer.applyPromptText(document.getElementById('prompt').value);
+  status(`גובה ${p.height.toFixed(2)}m · שריר ${p.muscle.toFixed(2)} · משקל ${p.weight.toFixed(2)}`);
+};
+document.getElementById('opacity').oninput = (e) => viewer.setBodyOpacity(+e.target.value);
+document.getElementById('bodymode').onclick = () => {
+  const next = viewer.getBodyMode() === 'skin' ? 'capsules' : 'skin';
+  if (next === 'skin') status('בונה עור רציף (SDF + Surface Nets)…');
+  requestAnimationFrame(() => {
+    viewer.setBodyMode(next);
+    status(next === 'skin' ? 'עור רציף: SkinnedMesh עם משקולות עור, מתעוות עם השלד' : 'שכבת קפסולות שקופה');
+  });
+};
+async function showRealSkeleton() {
+  status('טוען שלד אמיתי (BodyParts3D, סריקת MRI)…');
+  const n = await viewer.enableRealSkeleton({ GLTFLoader, url: '../assets/real-skeleton.glb' });
+  status(`שלד אמיתי: ${n} קבוצות עצמות מסריקת MRI (BodyParts3D)`);
+}
+// השלד האמיתי הוא ברירת המחדל — נטען מיד עם פתיחת הדף
+showRealSkeleton().catch((e) => status('טעינת השלד האמיתי נכשלה: ' + e.message));
+
+const STYLE_CYCLE = { real: 'anatomic', anatomic: 'schematic', schematic: 'real' };
+document.getElementById('skelstyle').onclick = async () => {
+  const next = STYLE_CYCLE[viewer.getSkeletonStyle()] ?? 'real';
+  if (next === 'real') {
+    try { await showRealSkeleton(); } catch (e) { status('טעינת השלד האמיתי נכשלה: ' + e.message); }
+    return;
+  }
+  viewer.setSkeletonStyle(next);
+  status(next === 'anatomic' ? 'שלד אנטומי פרוצדורלי' : 'שלד סכמטי: מפרקים וגלילים');
+};
+document.getElementById('blend').oninput = (e) => viewer.setTrackingBlend(tracker?.running ? +e.target.value : 0);
+
+document.getElementById('attach').onclick = () => document.getElementById('glb').click();
+document.getElementById('glb').onchange = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  status('טוען מודל…');
+  const res = await viewer.attachModel(await file.arrayBuffer(), { GLTFLoader });
+  status(`מודל הולבש: ${res.mapped} עצמות מופו${res.missing.length ? `, חסרות: ${res.missing.join(', ')}` : ''}`);
+};
+
+let tracker = null;
+document.getElementById('camera').onclick = async () => {
+  if (tracker?.running) { tracker.stop(); viewer.setTrackingBlend(0); document.getElementById('cam').style.display = 'none'; return; }
+  tracker = new CameraTracker({
+    onPose: (lm, t) => viewer.onPoseFrame(lm, t),
+    onStatus: (s) => status({ 'loading-models': 'טוען מודלי מעקב…', 'opening-camera': 'פותח מצלמה…', tracking: 'מעקב פעיל ✓', stopped: 'מצלמה כבויה' }[s] ?? s),
+  });
+  try {
+    const video = await tracker.start();
+    const pv = document.getElementById('cam');
+    pv.srcObject = video.srcObject; pv.play(); pv.style.display = 'block';
+    viewer.setTrackingBlend(+document.getElementById('blend').value);
+  } catch (err) {
+    status(`שגיאת מצלמה: ${err.message}`);
+  }
+};
+</script>
+</body>
+</html>
