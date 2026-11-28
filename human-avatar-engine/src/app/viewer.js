@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import { createSkeleton, createSkeletonView } from '../core/skeleton.js';
+import { createAnatomicalView } from '../core/anatomy.js';
 import { createBodyLayer } from '../core/body-layer.js';
 import { bindModelToSkeleton } from '../core/model-attach.js';
 import { applyProportions, defaultBodyParams } from '../formulas/proportions.js';
@@ -96,9 +97,20 @@ export function createViewer(canvas, { background = 0x0a0f1a } = {}) {
 
   // ===== המנוע =====
   const skeleton = createSkeleton();
-  const skelView = createSkeletonView(skeleton);
+  const skelView = createSkeletonView(skeleton);   // שלד סכמטי (מפרקים+גלילים)
+  const anatomy = createAnatomicalView(skeleton);  // שלד אנטומי אמיתי
   const body = createBodyLayer(skeleton);
   scene.add(skeleton.root);
+
+  let skeletonStyle = 'anatomic';
+  const applySkeletonStyle = () => {
+    const schematic = skeletonStyle === 'schematic';
+    for (const [, bone] of skeleton.bones) bone.traverse((o) => {
+      if (o.isMesh && (o.name.startsWith('joint:') || o.name.startsWith('bone:'))) o.visible = schematic;
+    });
+    anatomy.setVisible(skeletonStyle === 'anatomic');
+  };
+  applySkeletonStyle();
 
   let params = defaultBodyParams();
   applyProportions(skeleton, params);
@@ -170,13 +182,18 @@ export function createViewer(canvas, { background = 0x0a0f1a } = {}) {
       params = applyProportions(skeleton, p);
       body.rebuild();
       body.applyParams(params);
+      anatomy.rebuild();
+      applySkeletonStyle();
       ctrl.apply();
       return params;
     },
 
+    /** 'anatomic' | 'schematic' | 'none' */
+    setSkeletonStyle(style) { skeletonStyle = style; applySkeletonStyle(); },
+    getSkeletonStyle: () => skeletonStyle,
+
     setBodyOpacity: (v) => body.setOpacity(v),
     setIdle: (v) => { idleOn = v; },
-    setSkeletonVisible(v) { for (const [, bone] of skeleton.bones) bone.traverse((o) => { if (o.isMesh && (o.name.startsWith('joint:') || o.name.startsWith('bone:'))) o.visible = v; }); },
 
     /** עדכון ממעקב מצלמה (נקרא מה-tracker) */
     onPoseFrame(landmarks, tSec) { lastPose = { landmarks, t: tSec }; },
