@@ -231,6 +231,12 @@ root.userData = {
   license: 'CC-BY-SA 2.1 Japan',
   units: 'meters',
   stature: +DATA_STATURE.toFixed(4),
+  // מיקומי המפרקים האמיתיים — כדי שהריג יתכוונן אליהם בזמן ריצה
+  joints: Object.fromEntries(Object.entries(PIVOTS).map(
+    ([k, v]) => [k, [+v.x.toFixed(4), +v.y.toFixed(4), +v.z.toFixed(4)]],
+  )),
+  handLen: { L: +TIPLEN.handL.toFixed(4), R: +TIPLEN.handR.toFixed(4) },
+  footLen: { L: +TIPLEN.footL.toFixed(4), R: +TIPLEN.footR.toFixed(4) },
 };
 
 for (const [gName, parts] of groups) {

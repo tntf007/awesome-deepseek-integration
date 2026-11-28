@@ -6,8 +6,10 @@
 // מקור הנתונים: BodyParts3D / Anatomography,
 // © The Database Center for Life Science, רישיון CC-BY-SA 2.1 Japan.
 
+import { REFERENCE_HEIGHT } from './skeleton.js';
+
 /**
- * טוען GLB של שלד אמיתי. מחזיר ידית עם attach / refit / setVisible.
+ * טוען GLB של שלד אמיתי. מחזיר ידית עם attach / conformRig / refit / setVisible.
  * @param {string} url כתובת הקובץ (יחסית לדף)
  * @param {{GLTFLoader: any}} deps הזרקת GLTFLoader (מגיע מ-three/addons)
  */
@@ -17,8 +19,11 @@ export async function loadRealSkeleton(url, { GLTFLoader, buffer = null }) {
     ? await loader.parseAsync(buffer, '')
     : await loader.loadAsync(url);
   const root = gltf.scene;
-  const stature = root.userData?.stature
-    ?? root.children[0]?.parent?.userData?.stature ?? 1.638;
+  // ה-userData של השורש יכול לשבת על הסצנה או על הקבוצה שבתוכה
+  let meta = root.userData?.stature ? root.userData : null;
+  if (!meta) root.traverse((o) => { if (!meta && o.userData?.stature) meta = o.userData; });
+  const stature = meta?.stature ?? 1.638;
+  const joints = meta?.joints ?? null;
   const parts = [];
   // GLTFExporter עשוי לעטוף בסצנה; המזהה הוא userData.parent על כל mesh
   root.traverse((o) => { if (o.isMesh && o.userData?.parent) parts.push(o); });
@@ -29,6 +34,57 @@ export async function loadRealSkeleton(url, { GLTFLoader, buffer = null }) {
   return {
     parts,
     stature,
+    joints,
+
+    /**
+     * מכוונן את היסטי המנוחה של הריג למפרקים האמיתיים של השלד הסרוק,
+     * כך שכל עצם מתיישבת בדיוק על המפרק שלה — בלי רווחים בכתף או בברך.
+     * אחרי הקריאה יש להריץ applyProportions (setParams של ה-viewer עושה זאת).
+     */
+    conformRig(skeleton) {
+      if (!joints) return false;
+      const k = REFERENCE_HEIGHT / stature;
+      const J = (n) => joints[n];
+      const set = (name, x, y, z) => skeleton.restOffsets.get(name).set(x * k, y * k, z * k);
+      const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+      const len = (v) => Math.hypot(v[0], v[1], v[2]);
+
+      // upperChest לא נמדד ישירות — אמצע הדרך בין T12 ל-C7
+      const upperChest = J('chest').map((c, i) => (c + J('neck')[i]) / 2);
+
+      set('hips', 0, J('hips')[1], 0);
+      const d1 = sub(J('spine'), J('hips')); set('spine', 0, d1[1], d1[2]);
+      const d2 = sub(J('chest'), J('spine')); set('chest', 0, d2[1], d2[2]);
+      const d3 = sub(upperChest, J('chest')); set('upperChest', 0, d3[1], d3[2]);
+      const d4 = sub(J('neck'), upperChest); set('neck', 0, d4[1], d4[2]);
+      const d5 = sub(J('head'), J('neck')); set('head', 0, d5[1], d5[2]);
+      set('headTop', 0, Math.max(0.12, stature - J('head')[1]), 0);
+
+      for (const side of ['L', 'R']) {
+        const sgn = side === 'L' ? 1 : -1;
+        // המקטעים של הזרוע סובבו ל-T-pose סביב ציר Z — אותו סיבוב חל על ההיסטים
+        const rot = (v) => (side === 'L' ? [-v[1], v[0], v[2]] : [v[1], -v[0], v[2]]);
+
+        const sh = sub(J(`upperArm${side}`), upperChest);
+        set(`shoulder${side}`, sh[0] * 0.3, sh[1] * 0.3, sh[2] * 0.3);
+        set(`upperArm${side}`, sh[0] * 0.7, sh[1] * 0.7, sh[2] * 0.7);
+        const elbow = rot(sub(J(`lowerArm${side}`), J(`upperArm${side}`)));
+        set(`lowerArm${side}`, elbow[0], elbow[1], elbow[2]);
+        const wrist = rot(sub(J(`hand${side}`), J(`lowerArm${side}`)));
+        set(`hand${side}`, wrist[0], wrist[1], wrist[2]);
+        set(`handTip${side}`, sgn * (meta?.handLen?.[side] ?? 0.18) * 0.85, 0, 0);
+
+        const hip = sub(J(`upperLeg${side}`), J('hips'));
+        set(`upperLeg${side}`, hip[0], hip[1], hip[2]);
+        const knee = sub(J(`lowerLeg${side}`), J(`upperLeg${side}`));
+        set(`lowerLeg${side}`, knee[0], knee[1], knee[2]);
+        const ankle = sub(J(`foot${side}`), J(`lowerLeg${side}`));
+        set(`foot${side}`, ankle[0], ankle[1], ankle[2]);
+        const ankleY = J(`foot${side}`)[1];
+        set(`toes${side}`, 0, -(ankleY - 0.025), (meta?.footLen?.[side] ?? 0.24) * 0.6);
+      }
+      return true;
+    },
 
     /** מצמיד כל קבוצת עצמות לעצם הריג שלה. */
     attach(skeleton) {

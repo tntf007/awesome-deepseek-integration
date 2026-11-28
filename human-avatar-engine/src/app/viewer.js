@@ -216,6 +216,8 @@ export function createViewer(canvas, { background = 0x0a0f1a } = {}) {
       if (!realSkel) {
         realSkel = await loadRealSkeleton(url, { GLTFLoader, buffer });
         realSkel.attach(skeleton);
+        // כיוונון הריג למפרקים האמיתיים — העצמות מתיישבות בלי רווחים
+        if (realSkel.conformRig(skeleton)) this.setParams(params);
       }
       realSkel.refit(skeleton, params);
       skeletonStyle = 'real';
