@@ -6,6 +6,7 @@ import { createSkeleton, createSkeletonView } from '../core/skeleton.js';
 import { createAnatomicalView } from '../core/anatomy.js';
 import { createBodyLayer } from '../core/body-layer.js';
 import { loadRealSkeleton } from '../core/real-skeleton.js';
+import { createSkinMesh } from '../core/skin-mesh.js';
 import { applyAnthropometry } from '../core/anthropometry.js';
 import { ansurMeasurements } from '../data/ansur-proportions.js';
 import { bindModelToSkeleton } from '../core/model-attach.js';
@@ -108,6 +109,10 @@ export function createViewer(canvas, { background = 0x0a0f1a } = {}) {
   // עותק של היסטי ברירת המחדל — לשחזור אחרי כיול ANSUR
   const defaultRest = new Map([...skeleton.restOffsets].map(([k, v]) => [k, v.clone()]));
   let realSkel = null; // השלד האמיתי (BodyParts3D) — נטען עצלנית
+
+  // עור רציף (SkinnedMesh) — נבנה עצלנית במעבר הראשון למצב 'skin'
+  const skin = createSkinMesh(skeleton);
+  let bodyMode = 'capsules'; // 'capsules' | 'skin'
 
   let skeletonStyle = 'anatomic';
   const applySkeletonStyle = () => {
@@ -224,16 +229,33 @@ export function createViewer(canvas, { background = 0x0a0f1a } = {}) {
       body.applyParams(params);
       anatomy.rebuild();
       realSkel?.refit(skeleton, params);
+      if (bodyMode === 'skin' && skin.mesh) scene.add(skin.rebuild(params));
       applySkeletonStyle();
       ctrl.apply();
       return params;
     },
 
+    /** 'capsules' — שכבת הקפסולות השקופה; 'skin' — עור רציף (SkinnedMesh) */
+    setBodyMode(mode) {
+      bodyMode = mode;
+      if (mode === 'skin') {
+        if (!skin.mesh) scene.add(skin.rebuild(params));
+        skin.setVisible(true);
+        body.setVisible(false);
+      } else {
+        skin.setVisible(false);
+        body.setVisible(true);
+      }
+      return bodyMode;
+    },
+    getBodyMode: () => bodyMode,
+    setSkinOpacity: (v) => skin.setOpacity(v),
+
     /** 'real' | 'anatomic' | 'schematic' | 'none' */
     setSkeletonStyle(style) { skeletonStyle = style; applySkeletonStyle(); },
     getSkeletonStyle: () => skeletonStyle,
 
-    setBodyOpacity: (v) => body.setOpacity(v),
+    setBodyOpacity(v) { if (bodyMode === 'skin') skin.setOpacity(v); else body.setOpacity(v); },
     setIdle: (v) => { idleOn = v; },
 
     /** עדכון ממעקב מצלמה (נקרא מה-tracker) */

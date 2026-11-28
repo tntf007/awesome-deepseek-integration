@@ -5,8 +5,8 @@
 import * as THREE from 'three';
 import { volumeScales } from '../formulas/proportions.js';
 
-// רדיוס לכל מקטע (מטרים) + קבוצת נפח
-const SEGMENTS = [
+// רדיוס לכל מקטע (מטרים) + קבוצת נפח — משותף גם לשכבת הקפסולות וגם לעור הרציף
+export const SEGMENTS = [
   // [parent, child, radiusTop, radiusBottom, group]
   ['hips', 'spine', 0.125, 0.135, 'core'],
   ['spine', 'chest', 0.120, 0.125, 'core'],
